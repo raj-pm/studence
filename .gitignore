@@ -1,0 +1,8 @@
+# Ignore secrets and unnecessary files
+.env
+*.env
+backend/firebase-service-account.json
+node_modules
+dist
+.DS_Store
+*.zip
