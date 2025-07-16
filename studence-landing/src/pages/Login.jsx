@@ -1,6 +1,7 @@
+// src/pages/Login.jsx
 import React from 'react';
 import { FcGoogle } from 'react-icons/fc';
-import { signInWithPopup } from 'firebase/auth';
+import { signInWithPopup, signOut, signInAnonymously } from 'firebase/auth';
 import { auth, provider } from '../firebase';
 import { useNavigate } from 'react-router-dom';
 import { useUser } from '../UserContext';
@@ -15,21 +16,26 @@ const Login = () => {
         prompt: 'select_account',
       });
 
+      // Sign out anonymous user before Google login
+      if (auth.currentUser && auth.currentUser.isAnonymous) {
+        await signOut(auth);
+      }
+
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
       const email = user.email;
 
       if (!email.endsWith('@sit.ac.in')) {
         alert('Please use your SIT college email.');
-        auth.signOut();
+        await signOut(auth);
         return;
       }
 
       const token = await user.getIdToken();
 
-      // Send token to backend to create/update user in Supabase
+      // Backend call to auto-create or fetch user profile
       const response = await fetch('/api/profile', {
-        method: 'GET', // optional, just to trigger auto-create
+        method: 'GET',
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -37,13 +43,13 @@ const Login = () => {
 
       const data = await response.json();
 
-      // Update local user context
       setUser({
         name: data.name || user.displayName || email,
         email,
         avatar_url: data.avatar_url || user.photoURL,
         token,
         postCount: data.postCount || 0,
+        isGuest: false,
       });
 
       navigate('/dashboard');
@@ -53,22 +59,34 @@ const Login = () => {
     }
   };
 
- 
- const handleGuestLogin = () => {
-  console.log("Guest login triggered");
-  setUser({
-    name: "Guest",
-    email: "guest@studence.app",
-    avatar_url: "",
-    token: null,
-    postCount: 0,
-  });
-  console.log("Navigating to dashboard...");
-  navigate('/dashboard');
-};
+  const handleGuestLogin = async () => {
+    console.log("Guest login triggered");
+    try {
+      if (auth.currentUser) {
+        await signOut(auth);
+        console.log("Existing user signed out before guest login.");
+      }
 
+      const result = await signInAnonymously(auth);
+      const guestUser = result.user;
+      const token = await guestUser.getIdToken();
 
+      setUser({
+        name: "Guest",
+        email: null,
+        avatar_url: "",
+        token,
+        postCount: 0,
+        isGuest: true,
+      });
 
+      console.log("Navigating to dashboard...");
+      navigate('/dashboard');
+    } catch (error) {
+      console.error("Anonymous sign-in error:", error);
+      alert("Guest login failed.");
+    }
+  };
 
   return (
     <div className="relative min-h-screen flex items-center justify-center bg-black overflow-hidden">
@@ -102,6 +120,10 @@ const Login = () => {
           <FcGoogle size={22} />
           Sign in with Google
         </button>
+      </div>
+
+      <div className="absolute bottom-4 text-white text-sm z-20">
+        © 2024 Studence. All rights reserved.
       </div>
     </div>
   );

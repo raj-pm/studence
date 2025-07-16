@@ -1,8 +1,8 @@
-// src/pages/Dashboard.jsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react"; // Added useCallback
 import { ThumbsUp, MessageSquare } from "lucide-react";
 import PostModal from "../components/PostModal";
-import { useUser } from "../UserContext"; // ✅ import user context
+import CommentsModal from "../components/CommentsModal"; // NEW: Import CommentsModal
+import { useUser } from "../UserContext";
 
 const typeColors = {
   Question: "bg-[#fbd1ac] text-[#7b3f00]",
@@ -11,13 +11,15 @@ const typeColors = {
 };
 
 export default function Dashboard() {
-  const { user } = useUser(); // ✅ get logged-in user
+  const { user } = useUser();
 
   const [posts, setPosts] = useState([]);
   const [modalType, setModalType] = useState(null);
   const [loading, setLoading] = useState(true);
   const [filterType, setFilterType] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
+  const [showCommentsModal, setShowCommentsModal] = useState(false); // NEW: State for comments modal
+  const [selectedPostId, setSelectedPostId] = useState(null); // NEW: State to hold post ID for comments
 
   const openModal = (type) => {
     if (!user) {
@@ -28,22 +30,105 @@ export default function Dashboard() {
   };
   const closeModal = () => setModalType(null);
 
-  const fetchPosts = async () => {
+  // NEW: Functions to handle comments modal
+  const openCommentsModal = (postId) => {
+    setSelectedPostId(postId);
+    setShowCommentsModal(true);
+  };
+  const closeCommentsModal = () => {
+    setSelectedPostId(null);
+    setShowCommentsModal(false);
+  };
+
+  const fetchPosts = useCallback(async () => { // Wrapped in useCallback
     try {
       setLoading(true);
+      // MODIFIED: Fetch likes and comments count from backend
       const res = await fetch("http://localhost:3000/api/posts/all");
       const data = await res.json();
-      setPosts(data.posts || []);
+
+      // For each post, fetch its like and comment counts
+      const postsWithCounts = await Promise.all(data.posts.map(async (post) => {
+        // Fetch like count
+        const likesRes = await fetch(`http://localhost:3000/api/posts/${post.id}/likes/count`); // Assuming a new endpoint for like count
+        const likesData = await likesRes.json();
+        const likeCount = likesData.count || 0;
+
+        // Fetch comment count
+        const commentsRes = await fetch(`http://localhost:3000/api/posts/${post.id}/comments/count`); // Assuming a new endpoint for comment count
+        const commentsData = await commentsRes.json();
+        const commentCount = commentsData.count || 0;
+
+        // Fetch user's like status for the post
+        let userLiked = false;
+        if (user && user.token) { // Only fetch if user is logged in
+          const likeStatusRes = await fetch(`http://localhost:3000/api/posts/${post.id}/like-status`, {
+            headers: {
+              Authorization: `Bearer ${user.token}`,
+            },
+          });
+          const likeStatusData = await likeStatusRes.json();
+          userLiked = likeStatusData.liked;
+        }
+
+        return {
+          ...post,
+          likes: likeCount,
+          comments: commentCount,
+          userLiked: userLiked, // Add user's like status
+        };
+      }));
+
+      setPosts(postsWithCounts || []);
     } catch (error) {
       console.error("Error fetching posts:", error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]); // Dependency on user to refetch when user logs in/out
 
   useEffect(() => {
     fetchPosts();
-  }, []);
+  }, [fetchPosts]); // Dependency on fetchPosts
+
+  // NEW: Handle liking/unliking a post
+  const handleToggleLike = async (postId) => {
+    if (!user || user.isGuest) {
+      alert("Please login to like posts.");
+      return;
+    }
+
+    try {
+      const res = await fetch(`http://localhost:3000/api/posts/${postId}/like`, {
+        method: "POST", // Or PUT
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${user.token}`,
+        },
+      });
+      const data = await res.json();
+      if (res.ok) {
+        // Update the posts state to reflect the new like count and userLiked status
+        setPosts((prevPosts) =>
+          prevPosts.map((post) =>
+            post.id === postId
+              ? {
+                  ...post,
+                  likes: data.liked ? post.likes + 1 : post.likes - 1,
+                  userLiked: data.liked,
+                }
+              : post
+          )
+        );
+      } else {
+        alert(data.error || "Failed to toggle like.");
+      }
+    } catch (error) {
+      console.error("Error toggling like:", error);
+      alert("Failed to toggle like.");
+    }
+  };
+
 
   const renderContent = (post) => {
     const content = post.content?.trim();
@@ -201,12 +286,23 @@ export default function Dashboard() {
 
                 <div className="flex justify-between items-center mt-3">
                   <div className="flex gap-6 text-md font-medium">
-                    <div className="flex items-center gap-1 text-[#7b3f00]">
+                    {/* NEW: Like Button */}
+                    <button
+                      onClick={() => handleToggleLike(post.id)}
+                      className={`flex items-center gap-1 ${
+                        post.userLiked ? "text-blue-600" : "text-[#7b3f00]"
+                      } hover:text-blue-800 transition-colors duration-200`}
+                      disabled={!user || user.isGuest}
+                    >
                       <ThumbsUp className="w-4 h-4" /> {post.likes || 0}
-                    </div>
-                    <div className="flex items-center gap-1 text-[#7b3f00]">
+                    </button>
+                    {/* NEW: Comment Button */}
+                    <button
+                      onClick={() => openCommentsModal(post.id)}
+                      className="flex items-center gap-1 text-[#7b3f00] hover:text-orange-600 transition-colors duration-200"
+                    >
                       <MessageSquare className="w-4 h-4" /> {post.comments || 0}
-                    </div>
+                    </button>
                   </div>
                   <span
                     className={`text-sm font-semibold px-3 py-1 rounded-full ${
@@ -223,11 +319,27 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* Modal */}
+      {/* Post Modal */}
       {modalType && user && (
-       <PostModal type={modalType} onClose={closeModal} refetch={fetchPosts} />
+       <PostModal
+         type={modalType}
+         onClose={closeModal}
+         refetch={fetchPosts}
+         currentUserName={user?.name}
+       />
+      )}
 
-        
+      {/* NEW: Comments Modal */}
+      {showCommentsModal && selectedPostId && (
+        console.log("Dashboard: user.uid being passed to CommentsModal:", user?.uid),
+        <CommentsModal
+          postId={selectedPostId}
+          onClose={closeCommentsModal}
+          currentUserName={user?.name}
+          currentUserAvatar={user?.avatar_url} // Pass avatar for comments
+          currentUserId={user?.uid} // Pass UID for comments (will be null if auth middleware issue persists)
+          refetchPosts={fetchPosts} // To update comment count on dashboard
+        />
       )}
     </div>
   );

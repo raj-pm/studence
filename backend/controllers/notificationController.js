@@ -1,30 +1,54 @@
-const db = require('../utils/db');
+import supabase from '../supabaseClient.js';
 
-exports.getNotifications = async (req, res) => {
-  const { user } = req.params;
+// Get notifications for the logged-in user
+export const getNotifications = async (req, res) => {
+  const recipientId = req.user.uid; // Get recipient ID from authenticated user
+
   try {
-    const result = await db.query(
-      `SELECT notifications.*, comments.content AS comment_text
-       FROM notifications
-       JOIN comments ON comments.id = notifications.comment_id
-       WHERE notifications.user_name = $1 AND seen = FALSE
-       ORDER BY notifications.created_at DESC`,
-      [user]
-    );
-    res.json(result.rows);
+    const { data: notifications, error } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('recipient_id', recipientId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('❌ Error fetching notifications:', error.message);
+      return res.status(500).json({ error: 'Failed to fetch notifications' });
+    }
+
+    res.status(200).json(notifications);
   } catch (err) {
-    console.error('❌ Error fetching notifications:', err);
-    res.status(500).json({ error: 'Failed to fetch notifications' });
+    console.error('❌ Unexpected error in getNotifications:', err.message);
+    res.status(500).json({ error: 'Something went wrong.' });
   }
 };
 
-exports.markAllAsSeen = async (req, res) => {
-  const { user } = req.params;
+// Mark notifications as seen
+export const markNotificationsAsSeen = async (req, res) => {
+  const recipientId = req.user.uid; // Get recipient ID from authenticated user
+  const { notificationId } = req.params; // Optional: if marking a single notification
+
   try {
-    await db.query('UPDATE notifications SET seen = TRUE WHERE user_name = $1', [user]);
-    res.json({ message: 'Notifications marked as seen' });
+    let query = supabase.from('notifications').update({ read: true });
+
+    if (notificationId) {
+      // Mark a specific notification as read
+      query = query.eq('id', notificationId).eq('recipient_id', recipientId);
+    } else {
+      // Mark all notifications for the user as read
+      query = query.eq('recipient_id', recipientId);
+    }
+
+    const { error } = await query;
+
+    if (error) {
+      console.error('❌ Error marking notifications as seen:', error.message);
+      return res.status(500).json({ error: 'Failed to update notifications' });
+    }
+
+    res.status(200).json({ message: 'Notifications marked as seen' });
   } catch (err) {
-    console.error('❌ Error marking notifications:', err);
-    res.status(500).json({ error: 'Failed to update notifications' });
+    console.error('❌ Unexpected error in markNotificationsAsSeen:', err.message);
+    res.status(500).json({ error: 'Something went wrong.' });
   }
 };

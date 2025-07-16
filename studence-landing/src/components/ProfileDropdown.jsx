@@ -27,10 +27,7 @@ export default function ProfileDropdown({ user, setUser, onLogout }) {
         });
 
         const data = await res.json();
-
-        if (!data.secure_url) {
-          throw new Error("Cloudinary upload failed");
-        }
+        if (!data.secure_url) throw new Error("Cloudinary upload failed");
 
         avatar_url = data.secure_url;
       }
@@ -39,32 +36,42 @@ export default function ProfileDropdown({ user, setUser, onLogout }) {
       const currentUser = auth.currentUser;
       const token = await currentUser.getIdToken();
 
-      const response = await fetch("/api/profile", {
+      console.log("Frontend: Sending name to backend:", nameInput);
+      console.log("Frontend: Sending avatar_url to backend:", avatar_url);
+      console.log("Frontend: User token:", token);
+
+      // FIX: Changed API endpoint to point to the backend server
+      const response = await fetch("http://localhost:3000/api/profile", {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          name: nameInput,
-          avatar_url,
-        }),
+        body: JSON.stringify({ name: nameInput, avatar_url }),
       });
 
       const updated = await response.json();
+      console.log("Frontend: Received response from backend:", updated);
+
+      if (!response.ok) {
+        console.error("Backend error during profile update:", updated.error || "Unknown error");
+        alert(updated.error || "Profile update failed due to server error.");
+        return;
+      }
 
       setUser((prev) => ({
         ...prev,
         name: updated.name,
         avatar_url: updated.avatar_url,
+        postCount: updated.post_count,
       }));
 
       setEditingName(false);
       setEditingImage(false);
       setImageFile(null);
     } catch (err) {
-      console.error("Profile update failed", err);
-      alert("Profile update failed");
+      console.error("Profile update failed (network/unexpected error):", err);
+      alert("Profile update failed.");
     } finally {
       setLoading(false);
     }
@@ -85,23 +92,19 @@ export default function ProfileDropdown({ user, setUser, onLogout }) {
 
   const handleLogin = () => navigate("/login");
 
-  // 🔐 Guest View
-  if (!user?.token) {
+  if (!user || user?.isGuest === true) {
     return (
       <div className="absolute right-0 mt-2 w-64 bg-white rounded-2xl shadow-xl p-6 z-50 text-sm text-[#7b3f00] flex flex-col items-center">
-        <img src={defaultAvatar} className="w-20 h-20 rounded-full mb-4" alt="Guest" />
-        <p className="text-sm mb-4 text-center text-[#7b3f00]">You are browsing as guest.</p>
         <button
           onClick={handleLogin}
           className="w-full bg-[#f7c3a0] hover:bg-[#f6b78a] text-[#7b3f00] font-semibold py-2 px-4 rounded-lg"
         >
-          Login
+          Login with Google
         </button>
       </div>
     );
   }
 
-  // ✅ Logged-in View
   return (
     <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-xl p-6 z-50 text-sm text-[#7b3f00]">
       {/* Avatar */}

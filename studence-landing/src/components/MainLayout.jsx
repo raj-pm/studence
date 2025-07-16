@@ -4,16 +4,20 @@ import { useUser } from "../UserContext";
 import Navbar from "./Navbar";
 
 export default function MainLayout({ children }) {
-  const { user } = useUser();
+  const { user, loading } = useUser();
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!user) {
+    if (!loading && !user) {
       navigate("/login");
     }
-  }, [user, navigate]);
+  }, [user, loading, navigate]);
 
-  const isGuest = user && !user.token; // token is null for guest
+  const isGuest = user && !user.token;
+
+  if (loading) {
+    return <div className="text-center py-8 text-gray-500">Loading...</div>; // 🔄 Prevent redirect while loading
+  }
 
   return (
     <>

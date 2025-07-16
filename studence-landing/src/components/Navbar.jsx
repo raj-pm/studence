@@ -15,7 +15,7 @@ export default function Navbar() {
   const { user, setUser } = useContext(UserContext);
   const navigate = useNavigate();
 
-  // 🟠 Scroll Hide Navbar
+  // 🟠 Hide navbar on scroll down
   useEffect(() => {
     const handleScroll = () => {
       setShow(window.scrollY <= lastScrollY);
@@ -25,46 +25,13 @@ export default function Navbar() {
     return () => window.removeEventListener("scroll", handleScroll);
   }, [lastScrollY]);
 
-  // ✅ Fetch profile after login
- useEffect(() => {
-  const unsubscribe = auth.onAuthStateChanged(async (currentUser) => {
-    if (!currentUser) return;
-
-    const token = await currentUser.getIdToken();
-
-    try {
-      const res = await fetch("/api/profile", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      const data = await res.json();
-
-      setUser({
-        token,
-        name: data.name,
-        email: data.email,
-        avatarUrl: data.avatarUrl,
-        postCount: data.postCount,
-      });
-    } catch (err) {
-      console.error("Failed to fetch profile", err);
-    }
-  });
-
-  return () => unsubscribe();
-}, []);
-
-
-  // 🔴 Logout
+  // 🔴 Logout handler
   const handleLogout = async () => {
-    await signOut(auth);
-    setUser(null);
+    await signOut(auth); // Firebase sign out
     navigate("/login");
   };
 
-  // ✅ Optional: name update from ProfileDropdown (handled inside too)
+  // ✏️ Handle name update from dropdown
   const handleNameUpdate = async (newName) => {
     try {
       const res = await fetch("/api/profile", {
@@ -88,21 +55,22 @@ export default function Navbar() {
         show ? "translate-y-0" : "-translate-y-full"
       }`}
     >
+      {/* Logo and Brand */}
       <div className="flex items-center text-2xl font-bold text-[#7b3f00] gap-2">
-  <img src={logo} alt="Logo" className="w-8 h-8 object-contain" />
-  Studence
-</div>
+        <img src={logo} alt="Logo" className="w-8 h-8 object-contain" />
+        Studence
+      </div>
 
-
+      {/* Navigation and Profile */}
       <div className="flex items-center gap-6 text-[#7b3f00] relative">
         <Link to="/dashboard">Dashboard</Link>
         <Link to="/your-posts">Your Posts</Link>
         <Bell className="w-5 h-5 cursor-pointer" />
 
-        {user ? (
+        {user && !user.isGuest ? (
           <div className="relative">
             <img
-              src={user.avatarUrl || defaultAvatar}
+              src={user.avatar_url || defaultAvatar}
               onClick={() => setShowDropdown(!showDropdown)}
               className="w-8 h-8 rounded-full cursor-pointer border border-[#7b3f00]"
               alt="Profile"

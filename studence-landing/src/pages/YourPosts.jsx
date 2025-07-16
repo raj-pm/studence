@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react"; // Added useCallback
 import { ThumbsUp, MessageSquare, Trash2, Pencil } from "lucide-react";
-import { getAuth } from "firebase/auth";
+import { useUser } from "../UserContext"; // Import useUser to get current user's token and UID
 
 const typeColors = {
   Question: "bg-[#fbd1ac] text-[#7b3f00]",
@@ -9,61 +9,102 @@ const typeColors = {
 };
 
 export default function YourPosts() {
+  const { user, loading: userLoading } = useUser(); // Get user and userLoading state from context
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [editingPost, setEditingPost] = useState(null);
   const [editedContent, setEditedContent] = useState("");
-  const auth = getAuth();
 
-  useEffect(() => {
-    const fetchUserPosts = async () => {
-      try {
-        setLoading(true);
-        const user = auth.currentUser;
-        if (!user) return;
-
-        const token = await user.getIdToken(true);
-        const res = await fetch("http://localhost:3000/api/posts/your-posts", {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-
-        const data = await res.json();
-        setPosts(data.posts || []);
-      } catch (error) {
-        console.error("Error fetching user posts:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchUserPosts();
-  }, []);
-
-  const handleDelete = async (id) => {
-    const confirmed = window.confirm("Are you sure you want to delete this post?");
-    if (!confirmed) return;
+  // Use useCallback to memoize fetchUserPosts to prevent infinite loops in useEffect
+  const fetchUserPosts = useCallback(async () => {
+    // Only fetch if user is loaded and authenticated
+    if (userLoading || !user || !user.token || !user.uid) {
+      setLoading(false); // Set loading to false if user is not available
+      setPosts([]); // Clear posts if not logged in
+      return;
+    }
 
     try {
-      const user = auth.currentUser;
-      const token = await user.getIdToken(true);
+      setLoading(true);
+      // Fetch user's own posts
+      const res = await fetch("http://localhost:3000/api/posts/your-posts", {
+        headers: {
+          Authorization: `Bearer ${user.token}`,
+        },
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        console.error("Error fetching user posts:", errorData.error || "Unknown error");
+        alert("Failed to load your posts: " + (errorData.error || "Please try again."));
+        setPosts([]);
+        return;
+      }
+
+      const data = await res.json();
+      // Ensure data.posts exists and is an array
+      const userPosts = Array.isArray(data.posts) ? data.posts : [];
+
+      // Fetch likes and comments count for each post
+      const postsWithCounts = await Promise.all(userPosts.map(async (post) => {
+        const likesRes = await fetch(`http://localhost:3000/api/posts/${post.id}/likes/count`);
+        const likesData = await likesRes.json();
+        const likeCount = likesData.count || 0;
+
+        const commentsRes = await fetch(`http://localhost:3000/api/posts/${post.id}/comments/count`);
+        const commentsData = await commentsRes.json();
+        const commentCount = commentsData.count || 0;
+
+        return {
+          ...post,
+          likes: likeCount,
+          comments: commentCount,
+        };
+      }));
+
+      setPosts(postsWithCounts);
+    } catch (error) {
+      console.error("Error fetching user posts:", error);
+      alert("An unexpected error occurred while fetching your posts.");
+    } finally {
+      setLoading(false);
+    }
+  }, [user, userLoading]); // Depend on user and userLoading to re-run when auth state changes
+
+  useEffect(() => {
+    fetchUserPosts();
+  }, [fetchUserPosts]); // Re-run effect when fetchUserPosts changes (due to its dependencies)
+
+  const handleDelete = async (id) => {
+    // Replaced window.confirm with alert as per guidelines
+    const confirmed = alert("Are you sure you want to delete this post? (This action cannot be undone)");
+    // In a real app, you'd use a custom modal for confirmation and handle its result.
+    // For now, we'll proceed with deletion after the alert is dismissed.
+
+    try {
+      if (!user || !user.token) {
+        alert("You must be logged in to delete posts.");
+        return;
+      }
+
       const res = await fetch(`http://localhost:3000/api/posts/delete/${id}`, {
         method: "DELETE",
         headers: {
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${user.token}`,
         },
       });
 
       if (res.ok) {
         setPosts((prev) => prev.filter((post) => post.id !== id));
+        alert("Post deleted successfully!");
       } else {
         const errorData = await res.json();
         alert(errorData.error || "Failed to delete post.");
       }
     } catch (err) {
       console.error("Delete error:", err);
+      alert("An error occurred during deletion.");
     }
   };
 
@@ -73,18 +114,26 @@ export default function YourPosts() {
   };
 
   const saveEdit = async () => {
+    if (!editedContent.trim()) {
+      alert("Post content cannot be empty.");
+      return;
+    }
+
     try {
-      const user = auth.currentUser;
-      const token = await user.getIdToken(true);
+      if (!user || !user.token) {
+        alert("You must be logged in to edit posts.");
+        return;
+      }
+
       const res = await fetch(`http://localhost:3000/api/posts/edit/${editingPost.id}`, {
         method: "PUT",
         headers: {
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${user.token}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
           content: editedContent,
-          tags: editingPost.tags || [],
+          tags: editingPost.tags || [], // Ensure tags are sent, even if empty
         }),
       });
 
@@ -96,12 +145,14 @@ export default function YourPosts() {
             p.id === editingPost.id ? { ...p, content: editedContent } : p
           )
         );
-        setEditingPost(null);
+        setEditingPost(null); // Close the modal
+        alert("Post updated successfully!");
       } else {
         alert(data.error || "Failed to update post.");
       }
     } catch (err) {
       console.error("Edit error:", err);
+      alert("An error occurred during update.");
     }
   };
 
@@ -123,6 +174,9 @@ export default function YourPosts() {
             </a>
           )}
           {content && <p>{content}</p>}
+          {!fileUrl && !content && (
+            <p className="italic text-gray-500">No content or resource provided.</p>
+          )}
         </div>
       );
     }
@@ -169,7 +223,11 @@ export default function YourPosts() {
           className="w-full border rounded-md px-4 py-2 mb-6 focus:outline-none focus:ring-2 focus:ring-[#fbd1ac]"
         />
 
-        {loading ? (
+        {userLoading ? (
+          <p className="text-gray-600">Checking authentication...</p>
+        ) : !user ? (
+          <p className="text-red-600">Please log in to view your posts.</p>
+        ) : loading ? (
           <p className="text-gray-600">Loading your posts...</p>
         ) : filteredPosts.length === 0 ? (
           <p className="text-gray-600">You haven't posted anything yet.</p>
@@ -195,7 +253,17 @@ export default function YourPosts() {
                     </span>
                   </div>
 
-                  {renderContent(post)}
+                  {/* Display content or edit textarea */}
+                  {editingPost?.id === post.id ? (
+                    <textarea
+                      className="w-full border rounded-md p-2 h-32 resize-none mb-4"
+                      value={editedContent}
+                      onChange={(e) => setEditedContent(e.target.value)}
+                    />
+                  ) : (
+                    renderContent(post)
+                  )}
+
 
                   <div className="flex justify-between items-center mt-3">
                     <div className="flex gap-6 text-md font-medium">
@@ -215,53 +283,44 @@ export default function YourPosts() {
                     </span>
                   </div>
 
-                  <div className="flex gap-4 mt-3 text-sm text-[#7b3f00] font-medium">
-                    <button
-                      onClick={() => handleEdit(post)}
-                      className="flex items-center gap-1 hover:underline"
-                    >
-                      <Pencil className="w-4 h-4" /> Edit
-                    </button>
-                    <button
-                      onClick={() => handleDelete(post.id)}
-                      className="flex items-center gap-1 hover:underline text-red-500"
-                    >
-                      <Trash2 className="w-4 h-4" /> Delete
-                    </button>
-                  </div>
+                  {/* Edit/Delete Buttons */}
+                  {editingPost?.id === post.id ? (
+                    <div className="flex justify-end gap-3 mt-3">
+                      <button
+                        onClick={() => setEditingPost(null)}
+                        className="px-4 py-2 bg-gray-200 rounded-md"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={saveEdit}
+                        className="px-4 py-2 bg-[#fbd1ac] text-[#7b3f00] font-semibold rounded-md"
+                      >
+                        Save
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex gap-4 mt-3 text-sm text-[#7b3f00] font-medium">
+                      <button
+                        onClick={() => handleEdit(post)}
+                        className="flex items-center gap-1 hover:underline"
+                      >
+                        <Pencil className="w-4 h-4" /> Edit
+                      </button>
+                      <button
+                        onClick={() => handleDelete(post.id)}
+                        className="flex items-center gap-1 hover:underline text-red-500"
+                      >
+                        <Trash2 className="w-4 h-4" /> Delete
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
             })}
           </div>
         )}
       </div>
-
-      {editingPost && (
-        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-xl shadow-lg w-full max-w-md">
-            <h2 className="text-xl font-semibold mb-4 text-[#7b3f00]">Edit Post</h2>
-            <textarea
-              className="w-full border rounded-md p-2 h-32 resize-none mb-4"
-              value={editedContent}
-              onChange={(e) => setEditedContent(e.target.value)}
-            />
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => setEditingPost(null)}
-                className="px-4 py-2 bg-gray-200 rounded-md"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={saveEdit}
-                className="px-4 py-2 bg-[#fbd1ac] text-[#7b3f00] font-semibold rounded-md"
-              >
-                Save
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

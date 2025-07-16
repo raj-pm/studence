@@ -1,16 +1,16 @@
 import express from 'express';
 import { verifyFirebaseToken } from '../middleware/authMiddleware.js';
-import { getUserNotifications } from '../models/notificationModel.js';
+import { getNotifications, markNotificationsAsSeen } from '../controllers/notificationController.js';
 
 const router = express.Router();
 
-router.get('/', verifyFirebaseToken, async (req, res) => {
-  try {
-    const notifications = await getUserNotifications(req.user.uid);
-    res.json(notifications);
-  } catch (err) {
-    res.status(500).json({ message: 'Failed to fetch notifications', error: err.message });
-  }
-});
+// Get all notifications for the logged-in user
+router.get('/', verifyFirebaseToken, getNotifications);
+
+// Mark a specific notification as seen
+router.put('/mark-as-seen/:notificationId', verifyFirebaseToken, markNotificationsAsSeen);
+
+// Mark all notifications as seen (NEW: Separate route for optional param)
+router.put('/mark-as-seen', verifyFirebaseToken, markNotificationsAsSeen);
 
 export default router;

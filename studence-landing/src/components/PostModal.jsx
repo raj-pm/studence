@@ -1,7 +1,10 @@
 import React, { useState } from "react";
 import { getAuth } from "firebase/auth";
+import { useUser } from "../UserContext"; // NEW: Import useUser
 
-export default function PostModal({ type, onClose, refetch }) {
+export default function PostModal({ type, onClose, refetch, currentUserName }) {
+  console.log("PostModal: currentUserName prop received:", currentUserName);
+
   const [content, setContent] = useState("");
   const [skills, setSkills] = useState("");
   const [tags, setTags] = useState("");
@@ -9,6 +12,7 @@ export default function PostModal({ type, onClose, refetch }) {
   const [postAs, setPostAs] = useState("You");
 
   const auth = getAuth();
+  const { refreshUserProfile } = useUser(); // NEW: Get refreshUserProfile from context
 
   const handleSubmit = async () => {
     const user = auth.currentUser;
@@ -53,13 +57,21 @@ export default function PostModal({ type, onClose, refetch }) {
         ? skills.split(",").map((t) => t.trim()).filter((t) => t)
         : tags.split(",").map((t) => t.trim()).filter((t) => t);
 
+    // Construct the payload
     const payload = {
       type: type.toLowerCase(),
       isAnonymous,
       tags: tagArray,
-      ...(link && { link }),         // 🔁 store as 'link'
+      ...(link && { link }),
       ...(content.trim() && { content }),
     };
+
+    // Explicitly add name if not anonymous
+    if (!isAnonymous) {
+      payload.name = currentUserName || user.displayName || "User";
+    }
+
+    console.log("PostModal: Final payload being sent:", payload);
 
     try {
       const res = await fetch("http://localhost:3000/api/posts/create", {
@@ -77,9 +89,9 @@ export default function PostModal({ type, onClose, refetch }) {
         alert(data.error || "Failed to post.");
       } else {
         onClose();
-        refetch(); // Refresh posts after successful submission
+        refetch(); // Refresh posts on Dashboard/YourPosts
+        await refreshUserProfile(); // NEW: Refresh user profile to update post count
         alert("Post submitted successfully!");
-
       }
     } catch (err) {
       console.error("Error:", err);
