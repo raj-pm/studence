@@ -123,7 +123,7 @@ const Login = () => {
       </div>
 
       <div className="absolute bottom-4 text-white text-sm z-20">
-        © 2024 Studence. All rights reserved.
+        © 2025 Studence. All rights reserved.
       </div>
     </div>
   );

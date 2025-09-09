@@ -97,7 +97,7 @@ export default function YourPosts() {
 
       if (res.ok) {
         setPosts((prev) => prev.filter((post) => post.id !== id));
-        alert("Post deleted successfully!");
+       
       } else {
         const errorData = await res.json();
         alert(errorData.error || "Failed to delete post.");

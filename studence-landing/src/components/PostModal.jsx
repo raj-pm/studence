@@ -12,14 +12,22 @@ export default function PostModal({ type, onClose, refetch, currentUserName }) {
   const [postAs, setPostAs] = useState("You");
 
   const auth = getAuth();
-  const { refreshUserProfile } = useUser(); // NEW: Get refreshUserProfile from context
+  const { refreshUserProfile, user } = useUser(); // NEW: Get refreshUserProfile from context
 
   const handleSubmit = async () => {
-    const user = auth.currentUser;
-    if (!user) {
+   
+    if (!user || user.isGuest) {
       alert("You must be logged in");
       return;
     }
+
+    const firebaseUser = auth.currentUser;
+  if (!firebaseUser) {
+    alert("You must be logged in");
+    return;
+  }
+
+  
 
     if (type === "Resource" && !file) {
       alert("Please upload a file before submitting.");
@@ -91,7 +99,7 @@ export default function PostModal({ type, onClose, refetch, currentUserName }) {
         onClose();
         refetch(); // Refresh posts on Dashboard/YourPosts
         await refreshUserProfile(); // NEW: Refresh user profile to update post count
-        alert("Post submitted successfully!");
+        
       }
     } catch (err) {
       console.error("Error:", err);
@@ -99,7 +107,7 @@ export default function PostModal({ type, onClose, refetch, currentUserName }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-center items-center bg-black bg-opacity-30">
+    <div className="fixed inset-0 z-50 flex justify-center items-center  bg-opacity-30">
       <div className="bg-white rounded-2xl w-full max-w-lg p-6 shadow-xl border border-[#f1e2d1]">
         <h2 className="text-2xl font-bold text-[#7b3f00] mb-5 text-center">
           {type === "Question" && "Ask a Question"}

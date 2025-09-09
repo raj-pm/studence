@@ -61,7 +61,7 @@ export default function Dashboard() {
 
         // Fetch user's like status for the post
         let userLiked = false;
-        if (user && user.token) { // Only fetch if user is logged in
+        if (user && !user.isGuest && user.token) { // Only fetch if user is logged in
           const likeStatusRes = await fetch(`http://localhost:3000/api/posts/${post.id}/like-status`, {
             headers: {
               Authorization: `Bearer ${user.token}`,
@@ -156,20 +156,24 @@ export default function Dashboard() {
       );
     }
 
-    if (type === "team") {
-      return (
-        <div className="text-lg text-black-600 whitespace-pre-line font-semibold">
-          <p className="mb-2">{content}</p>
-          {post.tags && post.tags.length > 0 && (
-            <div className="mt-2">
-              <p className="font-semibold text-black mb-1">
-                Skills Required: {post.tags.join(", ")}
-              </p>
-            </div>
-          )}
+   if (type === "team") {
+  return (
+    <div className="text-lg text-black-600 whitespace-pre-line font-semibold">
+      <p className="mb-2">{content}</p>
+      {post.tags && post.tags.length > 0 && (
+        <div className="mt-2">
+          <p className="text-sm italic text-black-600">
+            Skills Required:{" "}
+            <span className="not-italic font-medium text-black-700">
+              {post.tags.join(", ")}
+            </span>
+          </p>
         </div>
-      );
-    }
+      )}
+    </div>
+  );
+}
+
 
     return (
       <p className="text-lg font-semibold text-black-600 whitespace-pre-line">

@@ -1,1 +1,0 @@
-export default function Questions() { return <div className="p-6">Questions Page</div>; }

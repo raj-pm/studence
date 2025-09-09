@@ -97,7 +97,7 @@ console.log("CommentsModal: postAsAnonymous state:", postAsAnonymous);
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-center items-center bg-black bg-opacity-30">
+    <div className="fixed inset-0 z-50 flex justify-center items-center  bg-opacity-30">
       <div className="bg-white rounded-2xl w-full max-w-2xl h-[80vh] flex flex-col p-6 shadow-xl border border-[#f1e2d1]">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-2xl font-bold text-[#7b3f00]">Comments</h2>

@@ -1,1 +1,0 @@
-export default function Resources() { return <div className="p-6">Resources Page</div>; }
